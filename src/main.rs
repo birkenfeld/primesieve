@@ -1,4 +1,5 @@
 extern crate crossbeam;
+extern crate bit_vec;
 
 fn main() {
     let residues = [1, 11, 13, 17, 19, 23, 29, 31, 37, 41, 43, 47, 53, 59, 61, 67,
@@ -7,7 +8,7 @@ fn main() {
                     191, 193, 197, 199, 209, 211];
     let val = 2_000_000_000;
     let md = 210;
-    let rescnt = 48;
+    let rescnt = residues.len() - 1;
 
     println!("val = {}, mod = {}, rescnt = {}", val, md, rescnt);
 
@@ -27,7 +28,8 @@ fn main() {
     }
     let maxpcs  = k*rescnt + r-1; // maximum number of prime candidates
 
-    let mut prms: Vec<u8> = vec![0; maxpcs];
+    let mut prms = bit_vec::BitVec::from_elem(maxpcs, false);
+    //let mut prms: Vec<bool> = vec![false; maxpcs];
 
     println!("num = {}, k = {}, modk = {}, maxpcs = {}", num, k, modk, maxpcs);
 
@@ -38,7 +40,7 @@ fn main() {
     // sieve to eliminate nonprimes from primes prms array
     for i in 0..maxpcs {
         r += 1; if r > rescnt {r = 1; modk += md; k += 1;};
-        if prms[i] == 1 {
+        if prms[i] {
             continue;
         }
         let prm_r = residues[r];
@@ -54,7 +56,8 @@ fn main() {
                     let prod = prm_r * ri;
                     let mut j = (k*(prime + ri) + (prod-2)/md)*rescnt + posn[prod % md];
                     while j < maxpcs {
-                        prms[j] = 1; j += prmstep;
+                        prms.set(j, true);
+                        j += prmstep;
                     }
                 });
             });
@@ -70,7 +73,7 @@ fn main() {
             r = 1;
             modk += md;
         }
-        if prms[i] == 0 {
+        if !prms[i] {
             prmcnt += 1;
         }
     }
