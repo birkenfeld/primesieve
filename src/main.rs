@@ -1,4 +1,6 @@
+use std::mem;
 extern crate crossbeam;
+extern crate scoped_pool;
 
 fn main() {
     let residues = [1, 11, 13, 17, 19, 23, 29, 31, 37, 41, 43, 47, 53, 59, 61, 67,
@@ -27,7 +29,7 @@ fn main() {
     }
     let maxpcs  = k*rescnt + r-1; // maximum number of prime candidates
 
-    let mut prms: Vec<u8> = vec![0; maxpcs];
+    let prms: Vec<u8> = vec![0; maxpcs];
 
     println!("num = {}, k = {}, modk = {}, maxpcs = {}", num, k, modk, maxpcs);
 
@@ -35,6 +37,7 @@ fn main() {
 
     modk=0; r=0; k=0;
 
+    let pool = scoped_pool::Pool::new(3);
     // sieve to eliminate nonprimes from primes prms array
     for i in 0..maxpcs {
         r += 1; if r > rescnt {r = 1; modk += md; k += 1;};
@@ -47,18 +50,20 @@ fn main() {
             break;
         }
         let prmstep = prime * rescnt;
-        for ri in &residues[1..rescnt+1] {
-            let prms = &mut prms;
-            crossbeam::scope(|scope| {
-                scope.spawn(move || {
+        pool.scoped(|scope| {
+            for ri in &residues[1..rescnt+1] {
+                let prms = &prms;
+                scope.execute(move || {
+                    let raw_prms = unsafe { mem::transmute::<*const u8, *mut u8>(prms.as_ptr()) };
                     let prod = prm_r * ri;
                     let mut j = (k*(prime + ri) + (prod-2)/md)*rescnt + posn[prod % md];
                     while j < maxpcs {
-                        prms[j] = 1; j += prmstep;
+                        unsafe { *raw_prms.offset(j as isize) = 1; }
+                        j += prmstep;
                     }
                 });
-            });
-        }
+            }
+        });
     }
     // the prms array now has all the positions for primes r1..N
     // extract prime numbers and count from prms into prims array
