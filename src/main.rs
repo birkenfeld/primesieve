@@ -1,4 +1,5 @@
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::{Arc, Mutex};
+//use std::sync::atomic::{AtomicBool, Ordering};
 extern crate crossbeam;
 extern crate scoped_pool;
 
@@ -29,10 +30,12 @@ fn main() {
     }
     let maxpcs  = k*rescnt + r-1; // maximum number of prime candidates
 
-    let mut prms = Vec::with_capacity(maxpcs);
-    for _ in 0..maxpcs {
-        prms.push(AtomicBool::new(false));
-    }
+    // let mut prms = Vec::with_capacity(maxpcs);
+    // for _ in 0..maxpcs {
+    //     prms.push(AtomicBool::new(false));
+    // }
+    let prms = vec![false; maxpcs];
+    let mprms = Arc::new(Mutex::new(prms));
 
     println!("num = {}, k = {}, modk = {}, maxpcs = {}", num, k, modk, maxpcs);
 
@@ -40,15 +43,17 @@ fn main() {
 
     modk=0; r=0; k=0;
 
-    let ord = Ordering::Relaxed;
+    //let ord = Ordering::Relaxed;
 
     // sieve to eliminate nonprimes from primes prms array
-    let pool = scoped_pool::Pool::new(8);
+    let pool = scoped_pool::Pool::new(4);
     pool.scoped(|scope| {
         for i in 0..maxpcs {
             r += 1; if r > rescnt {r = 1; modk += md; k += 1;};
-            if prms[i].load(ord) {
-                continue;
+            {
+                if mprms.lock().unwrap()[i] {
+                    continue;
+                }
             }
             let prm_r = residues[r];
             let prime = modk + prm_r;
@@ -57,12 +62,12 @@ fn main() {
             }
             let prmstep = prime * rescnt;
             for ri in &residues[1..rescnt+1] {
-                let prms = &prms;
+                let tprms = mprms.clone();
                 scope.execute(move || {
                     let prod = prm_r * ri;
                     let mut j = (k*(prime + ri) + (prod-2)/md)*rescnt + posn[prod % md];
                     while j < maxpcs {
-                        prms[j].store(true, ord);
+                        tprms.lock().unwrap()[j] = true;
                         j += prmstep;
                     }
                 });
@@ -73,13 +78,14 @@ fn main() {
     // extract prime numbers and count from prms into prims array
     let mut prmcnt = 4;
     modk=0; r=0;
+    let prms = mprms.lock().unwrap();
     for i in 0..maxpcs {
         r += 1;
         if r > rescnt {
             r = 1;
             modk += md;
         }
-        if !prms[i].load(ord) {
+        if !prms[i] {
             prmcnt += 1;
         }
     }
