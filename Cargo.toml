@@ -5,4 +5,4 @@ authors = ["Georg Brandl <georg@python.org>"]
 
 [dependencies]
 crossbeam = "*"
-bit-vec = "*"
+scoped-pool = "*"
